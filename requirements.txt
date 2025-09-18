@@ -1,0 +1,6 @@
+pyaudio
+numpy
+shazamio==0.7.0
+Pillow
+requests
+
