@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Musico - Music Identification Tool (Windows Version)
+Musico - Music Identification Tool (macOS Version)
 A tool that listens for music and identifies it using Shazam API
+Optimized for macOS with proper thread handling
 """
 
 import asyncio
@@ -30,7 +31,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class MusicoWindows:
+class MusicoMacOS:
     def __init__(self):
         self.audio = None
         self.stream = None
@@ -39,8 +40,9 @@ class MusicoWindows:
         self.cover_label = None
         self.status_label = None
         self.track_label = None
+        self.running = False
         
-        # Audio configuration for Windows
+        # Audio configuration for macOS
         self.sample_rate = 44100
         self.chunk_size = 1024
         self.channels = 1
@@ -48,12 +50,12 @@ class MusicoWindows:
         self.silence_threshold = 0.0002
         self.recording_duration = 2.0
         
-        # Windows-specific audio device selection
+        # macOS-specific audio device selection
         self.input_device_index = None
         self.setup_audio()
     
     def setup_audio(self):
-        """Setup audio for Windows with automatic device detection"""
+        """Setup audio for macOS with automatic device detection"""
         try:
             self.audio = pyaudio.PyAudio()
             
@@ -63,7 +65,7 @@ class MusicoWindows:
                 info = self.audio.get_device_info_by_index(i)
                 if info['maxInputChannels'] > 0:
                     logger.info(f"  {i}: {info['name']} (inputs: {info['maxInputChannels']})")
-                    if 'microphone' in info['name'].lower() or 'mic' in info['name'].lower():
+                    if any(keyword in info['name'].lower() for keyword in ['microphone', 'mic', 'built-in', 'internal']):
                         self.input_device_index = i
                         logger.info(f"  Selected microphone: {info['name']}")
             
@@ -77,13 +79,13 @@ class MusicoWindows:
             raise
     
     def setup_gui(self):
-        """Setup the GUI for Windows"""
+        """Setup the GUI for macOS (must be called on main thread)"""
         try:
             logger.info("Setting up GUI...")
             
             # Create main window
             self.root = tk.Tk()
-            self.root.title("Musico - Windows")
+            self.root.title("Musico - macOS")
             self.root.attributes('-fullscreen', True)
             self.root.configure(cursor='none')
             
@@ -112,7 +114,8 @@ class MusicoWindows:
             # Add keyboard bindings
             self.root.bind('<Escape>', lambda e: self.root.attributes('-fullscreen', False))
             self.root.bind('<F11>', lambda e: self.root.attributes('-fullscreen', True))
-            self.root.bind('<q>', lambda e: self.root.quit())
+            self.root.bind('<q>', lambda e: self.quit_app())
+            self.root.bind('<Command-q>', lambda e: self.quit_app())
             
             # Set initial state
             self.update_gui(None, "silence")
@@ -122,6 +125,13 @@ class MusicoWindows:
         except Exception as e:
             logger.error(f"Error setting up GUI: {e}")
             raise
+    
+    def quit_app(self):
+        """Quit the application"""
+        logger.info("Quitting Musico...")
+        self.running = False
+        if self.root:
+            self.root.quit()
     
     def record_audio_sample(self):
         """Record a sample of audio from the microphone"""
@@ -315,50 +325,57 @@ class MusicoWindows:
             except:
                 pass
     
-    def run_gui_loop(self):
-        """Run the GUI main loop on the main thread"""
-        self.setup_gui()
-        if self.root:
-            self.root.mainloop()
+    def start_audio_processing(self):
+        """Start audio processing in a background thread"""
+        def audio_thread():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            async def audio_loop():
+                while self.running:
+                    try:
+                        logger.info("Starting new audio sample...")
+                        await self.process_audio_sample()
+                        logger.info("Waiting 60 seconds before next sample...")
+                        await asyncio.sleep(60)
+                    except Exception as e:
+                        logger.error(f"Error in audio processing: {e}")
+                        await asyncio.sleep(10)  # Wait before retrying
+            
+            try:
+                loop.run_until_complete(audio_loop())
+            finally:
+                loop.close()
+        
+        self.audio_thread = threading.Thread(target=audio_thread, daemon=True)
+        self.audio_thread.start()
     
-    async def run(self):
-        """Main run loop"""
+    def run(self):
+        """Main run loop - GUI runs on main thread"""
         logger.info("Starting Musico...")
+        self.running = True
         
-        # Setup GUI on main thread first
+        # Setup GUI on main thread
         self.setup_gui()
         
-        # Start audio processing in background
-        audio_task = asyncio.create_task(self.audio_processing_loop())
+        # Start audio processing in background thread
+        self.start_audio_processing()
         
-        # Run GUI on main thread (this will block)
+        # Run GUI main loop (this blocks on main thread)
         try:
             if self.root:
                 self.root.mainloop()
         except KeyboardInterrupt:
             logger.info("Musico stopped by user")
         finally:
-            audio_task.cancel()
+            self.running = False
             if self.audio:
                 self.audio.terminate()
-    
-    async def audio_processing_loop(self):
-        """Background audio processing loop"""
-        try:
-            while True:
-                logger.info("Starting new audio sample...")
-                await self.process_audio_sample()
-                logger.info("Waiting 60 seconds before next sample...")
-                await asyncio.sleep(60)
-        except asyncio.CancelledError:
-            logger.info("Audio processing stopped")
-        except Exception as e:
-            logger.error(f"Error in audio processing loop: {e}")
 
 def main():
     """Main entry point"""
-    musico = MusicoWindows()
-    asyncio.run(musico.run())
+    musico = MusicoMacOS()
+    musico.run()
 
 if __name__ == "__main__":
     main()
