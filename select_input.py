@@ -59,29 +59,56 @@ def update_musico_config(device_id):
         with open('Musico.py', 'r') as f:
             content = f.read()
         
-        # Find the record_audio_sample method and update the stream creation
         lines = content.split('\n')
         updated = False
+        stream_start_line = -1
         
+        # Find the stream creation block
         for i, line in enumerate(lines):
             if 'stream = self.audio.open(' in line:
-                # Look for the stream creation block
-                for j in range(i, min(i+15, len(lines))):
-                    if 'input_device_index=None' in lines[j]:
-                        lines[j] = f"                input_device_index={device_id},  # Selected audio device"
-                        updated = True
-                        break
-                    elif 'input_device_index' not in lines[j] and 'stream_callback=None' in lines[j]:
-                        # Insert the parameter before stream_callback
-                        lines[j] = f"                input_device_index={device_id},  # Selected audio device"
-                        lines.insert(j+1, f"                stream_callback=None")
-                        updated = True
-                        break
-                    elif ')' in lines[j] and 'input_device_index' not in content:
-                        # Insert the parameter before the closing parenthesis
-                        lines[j] = f"                input_device_index={device_id},  # Selected audio device\n{lines[j]}"
-                        updated = True
-                        break
+                stream_start_line = i
+                break
+        
+        if stream_start_line == -1:
+            print("⚠️  Could not find stream creation in Musico.py")
+            return False
+        
+        # Look for existing input_device_index lines in the stream block
+        input_device_lines = []
+        stream_end_line = -1
+        
+        for i in range(stream_start_line, min(stream_start_line + 15, len(lines))):
+            if 'input_device_index' in lines[i]:
+                input_device_lines.append(i)
+            elif ')' in lines[i] and stream_end_line == -1:
+                stream_end_line = i
+                break
+        
+        # Remove all existing input_device_index lines
+        for line_num in reversed(input_device_lines):
+            print(f"Removing existing input_device_index line: {lines[line_num].strip()}")
+            del lines[line_num]
+            if stream_end_line > line_num:
+                stream_end_line -= 1
+        
+        # Add the new input_device_index line before stream_callback or before closing parenthesis
+        insert_line = -1
+        for i in range(stream_start_line, min(stream_start_line + 15, len(lines))):
+            if 'stream_callback=None' in lines[i]:
+                insert_line = i
+                break
+            elif ')' in lines[i] and insert_line == -1:
+                insert_line = i
+                break
+        
+        if insert_line != -1:
+            new_line = f"                input_device_index={device_id},  # Selected audio device"
+            lines.insert(insert_line, new_line)
+            updated = True
+            print(f"Added new input_device_index line: {new_line}")
+        else:
+            print("⚠️  Could not find insertion point in stream creation")
+            return False
         
         if updated:
             with open('Musico.py', 'w') as f:

@@ -1,0 +1,16 @@
+# Musico Windows Requirements
+# Core audio and music identification
+pyaudio>=0.2.11
+numpy>=1.21.0
+shazamio>=5.0.0
+
+# Image processing and GUI
+Pillow>=9.0.0
+requests>=2.28.0
+
+# Windows-specific audio libraries (if needed)
+# These are usually included with PyAudio on Windows
+# portaudio19-dev equivalent for Windows is handled by PyAudio installer
+
+# Optional: For better audio quality on Windows
+# sounddevice>=0.4.4

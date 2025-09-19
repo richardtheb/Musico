@@ -2,7 +2,7 @@
 
 # Audio settings
 SILENCE_THRESHOLD = 0.0002  # Lower values = more sensitive to quiet sounds
-SAMPLE_RATE = 44100
+SAMPLE_RATE = 48000
 CHUNK_SIZE = 1024
 RECORD_DURATION = 10  # seconds
 

@@ -1,6 +1,15 @@
-pyaudio
-numpy
-shazamio==0.7.0
-Pillow
-requests
+# Musico Requirements - Cross Platform
+# Core audio and music identification
+pyaudio>=0.2.11
+numpy>=1.21.0
+shazamio>=0.7.0
+
+# Image processing and GUI
+Pillow>=9.0.0
+requests>=2.28.0
+
+# Platform-specific notes:
+# Linux: Install portaudio19-dev first: sudo apt-get install portaudio19-dev
+# Windows: PyAudio should install automatically with pip
+# macOS: Install portaudio first: brew install portaudio
 

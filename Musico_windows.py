@@ -1,68 +1,91 @@
 #!/usr/bin/env python3
 """
-Raspberry Pi Music Identifier
-Samples audio every 60 seconds, detects music, and identifies tracks using Shazam.
+Musico - Music Identification Tool (Windows Version)
+A tool that listens for music and identifies it using Shazam API
 """
 
-import pyaudio
-import wave
-import numpy as np
-import time
+import asyncio
 import logging
 import os
-import sys
-from pathlib import Path
-import asyncio
-from PIL import Image
-import requests
-from io import BytesIO
-import tkinter as tk
-from tkinter import ttk
+import tempfile
 import threading
+import time
+import tkinter as tk
+from io import BytesIO
 
-# Import pyaudioop compatibility module for Python 3.13+
-try:
-    import pyaudioop
-except ImportError:
-    # Create a compatibility module for Python 3.13+
-    import pyaudioop_compat as pyaudioop
-    sys.modules['pyaudioop'] = pyaudioop
-
+import numpy as np
+import pyaudio
+import requests
+from PIL import Image, ImageTk
 from shazamio import Shazam
-from config import SILENCE_THRESHOLD, SAMPLE_RATE, CHUNK_SIZE, RECORD_DURATION, WINDOW_WIDTH, WINDOW_HEIGHT, LOG_LEVEL
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('Musico.log'),
-        logging.StreamHandler(sys.stdout)
+        logging.FileHandler('musico.log'),
+        logging.StreamHandler()
     ]
 )
 logger = logging.getLogger(__name__)
 
-class MusicIdentifier:
+class MusicoWindows:
     def __init__(self):
-        self.sample_rate = SAMPLE_RATE
-        self.chunk_size = CHUNK_SIZE
-        self.record_duration = RECORD_DURATION
-        self.silence_threshold = SILENCE_THRESHOLD
-        self.audio = pyaudio.PyAudio()
+        self.audio = None
+        self.stream = None
         self.shazam = Shazam()
         self.root = None
         self.cover_label = None
+        self.status_label = None
+        self.track_label = None
         
+        # Audio configuration for Windows
+        self.sample_rate = 44100
+        self.chunk_size = 1024
+        self.channels = 1
+        self.format = pyaudio.paInt16
+        self.silence_threshold = 0.0002
+        self.recording_duration = 2.0
+        
+        # Windows-specific audio device selection
+        self.input_device_index = None
+        self.setup_audio()
+    
+    def setup_audio(self):
+        """Setup audio for Windows with automatic device detection"""
+        try:
+            self.audio = pyaudio.PyAudio()
+            
+            # List available audio devices
+            logger.info("Available audio devices:")
+            for i in range(self.audio.get_device_count()):
+                info = self.audio.get_device_info_by_index(i)
+                if info['maxInputChannels'] > 0:
+                    logger.info(f"  {i}: {info['name']} (inputs: {info['maxInputChannels']})")
+                    if 'microphone' in info['name'].lower() or 'mic' in info['name'].lower():
+                        self.input_device_index = i
+                        logger.info(f"  Selected microphone: {info['name']}")
+            
+            if self.input_device_index is None:
+                # Use default input device
+                self.input_device_index = None
+                logger.info("Using default input device")
+            
+        except Exception as e:
+            logger.error(f"Error setting up audio: {e}")
+            raise
+    
     def setup_gui(self):
-        """Setup the GUI for displaying cover images"""
+        """Setup the GUI for Windows"""
         try:
             logger.info("Setting up GUI...")
-            self.root = tk.Tk()
-            self.root.title("Musico")
             
-            # Make window full screen
+            # Create main window
+            self.root = tk.Tk()
+            self.root.title("Musico - Windows")
             self.root.attributes('-fullscreen', True)
-            self.root.configure(cursor='none')  # Hide cursor for cleaner look
+            self.root.configure(cursor='none')
             
             # Get screen dimensions
             screen_width = self.root.winfo_screenwidth()
@@ -86,49 +109,53 @@ class MusicIdentifier:
             self.root.configure(bg="black")
             main_frame.configure(bg="black")
             
-            # Set initial state to silence
-            self.update_gui(None, "silence")
-            
-            # Bind Escape key to exit full screen
+            # Add keyboard bindings
             self.root.bind('<Escape>', lambda e: self.root.attributes('-fullscreen', False))
             self.root.bind('<F11>', lambda e: self.root.attributes('-fullscreen', True))
+            self.root.bind('<q>', lambda e: self.root.quit())
+            
+            # Set initial state
+            self.update_gui(None, "silence")
             
             logger.info("GUI setup completed successfully - Full screen mode")
             
         except Exception as e:
             logger.error(f"Error setting up GUI: {e}")
-            self.root = None
-        
+            raise
+    
     def record_audio_sample(self):
-        """Record a sample of audio from the default input device"""
+        """Record a sample of audio from the microphone"""
         try:
-            # Open audio stream with better error handling
+            logger.info("Recording audio sample...")
+            
+            # Calculate number of frames needed
+            frames_needed = int(self.sample_rate * self.recording_duration)
+            
+            # Open audio stream
             stream = self.audio.open(
-                format=pyaudio.paInt16,
-                channels=1,  # Mono
+                format=self.format,
+                channels=self.channels,
                 rate=self.sample_rate,
                 input=True,
-                frames_per_buffer=self.chunk_size,
-                input_device_index=1,  # Selected audio device
-                stream_callback=None
+                input_device_index=self.input_device_index,
+                frames_per_buffer=self.chunk_size
             )
             
-            logger.info("Recording audio sample...")
+            # Record audio
             frames = []
-            
-            # Record for the specified duration
-            for _ in range(0, int(self.sample_rate / self.chunk_size * self.record_duration)):
+            for _ in range(0, int(frames_needed / self.chunk_size)):
                 data = stream.read(self.chunk_size)
                 frames.append(data)
             
-            # Stop and close the stream
+            # Stop and close stream
             stream.stop_stream()
             stream.close()
             
-            # Convert to numpy array for analysis
+            # Convert to numpy array
             audio_data = b''.join(frames)
             audio_array = np.frombuffer(audio_data, dtype=np.int16)
             
+            logger.info(f"Recorded {len(audio_array)} samples")
             return audio_array
             
         except Exception as e:
@@ -136,53 +163,38 @@ class MusicIdentifier:
             return None
     
     def is_silent(self, audio_data):
-        """Check if the audio sample is silent or very quiet"""
+        """Check if the audio data represents silence"""
         if audio_data is None or len(audio_data) == 0:
             return True
-            
-        # Calculate RMS (Root Mean Square) to determine volume
+        
+        # Calculate RMS (Root Mean Square) of the audio
         rms = np.sqrt(np.mean(audio_data**2))
+        logger.info(f"Audio RMS level: {rms:.4f} (threshold: {self.silence_threshold})")
         
-        # Normalize RMS to 0-1 range
-        normalized_rms = rms / 32768.0  # 32768 is max value for 16-bit audio
-        
-        logger.info(f"Audio RMS level: {normalized_rms:.4f} (threshold: {self.silence_threshold:.4f})")
-        
-        is_silent = normalized_rms < self.silence_threshold
-        logger.info(f"Silence detection: {'SILENT' if is_silent else 'MUSIC DETECTED'}")
+        is_silent = rms < self.silence_threshold
+        logger.info(f"Silence detection: {'SILENCE' if is_silent else 'MUSIC DETECTED'}")
         
         return is_silent
     
-    def save_audio_sample(self, audio_data, filename="temp_audio.wav"):
-        """Save audio data to a temporary WAV file for Shazam processing"""
-        try:
-            with wave.open(filename, 'wb') as wf:
-                wf.setnchannels(1)  # Mono
-                wf.setsampwidth(self.audio.get_sample_size(pyaudio.paInt16))
-                wf.setframerate(self.sample_rate)
-                wf.writeframes(audio_data.tobytes())
-            return filename
-        except Exception as e:
-            logger.error(f"Error saving audio file: {e}")
-            return None
-    
     async def identify_music(self, audio_file):
-        """Use Shazam to identify the music in the audio file"""
+        """Identify music using Shazam API"""
         try:
             logger.info("Sending audio to Shazam for identification...")
-            result = await self.shazam.recognize(audio_file)
+            result = await self.shazam.recognize_song(audio_file)
             
             if result and 'track' in result:
                 track = result['track']
-                return {
-                    'title': track.get('title', 'Unknown'),
+                track_info = {
+                    'title': track.get('title', 'Unknown Title'),
                     'artist': track.get('subtitle', 'Unknown Artist'),
                     'album': track.get('sections', [{}])[0].get('metadata', [{}])[0].get('text', 'Unknown Album'),
                     'cover_url': track.get('images', {}).get('coverart', ''),
                     'shazam_url': track.get('url', '')
                 }
+                logger.info(f"Identified: {track_info['artist']} - {track_info['title']}")
+                return track_info
             else:
-                logger.info("No music identified in the sample")
+                logger.info("No music identified")
                 return None
                 
         except Exception as e:
@@ -191,10 +203,6 @@ class MusicIdentifier:
     
     def display_cover_image(self, cover_url):
         """Display the cover image in the GUI"""
-        if not cover_url or not self.root:
-            logger.warning("No cover URL or GUI not available")
-            return
-            
         try:
             logger.info(f"Downloading cover image from: {cover_url}")
             
@@ -215,11 +223,10 @@ class MusicIdentifier:
             logger.info(f"Resized image to: {image.size} (full screen)")
             
             # Convert to PhotoImage for tkinter
-            from PIL import ImageTk
             photo = ImageTk.PhotoImage(image)
             
             # Update the cover label
-            self.cover_label.configure(image=photo)
+            self.cover_label.configure(image=photo, text="")
             self.cover_label.image = photo  # Keep a reference
             
             logger.info("Cover image displayed successfully")
@@ -268,94 +275,87 @@ class MusicIdentifier:
             logger.error("Failed to record audio")
             return
         
-        # Check if silent
+        # Check for silence
         if self.is_silent(audio_data):
-            logger.info("Audio sample is silent, skipping...")
             if self.root:
                 self.root.after(0, lambda: self.update_gui(None, "silence"))
             return
         
-        logger.info("Music detected! Processing with Shazam...")
-        
-        # Update GUI to show music detected state
+        # Music detected - update GUI immediately
         if self.root:
             self.root.after(0, lambda: self.update_gui(None, "music_detected"))
         
-        # Save audio to temporary file
-        temp_file = self.save_audio_sample(audio_data)
-        if not temp_file:
-            logger.error("Failed to save audio file")
-            return
-        
-        try:
+        # Save audio to temporary file for Shazam
+        with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
+            # Convert numpy array to WAV format
+            import wave
+            with wave.open(temp_file.name, 'wb') as wav_file:
+                wav_file.setnchannels(self.channels)
+                wav_file.setsampwidth(2)  # 16-bit
+                wav_file.setframerate(self.sample_rate)
+                wav_file.writeframes(audio_data.tobytes())
+            
             # Identify music
             logger.info("Calling identify_music...")
-            track_info = await self.identify_music(temp_file)
+            track_info = await self.identify_music(temp_file.name)
             logger.info(f"identify_music returned: {track_info}")
             
-            # Update GUI based on identification result
+            # Update GUI with results
             if self.root:
                 if track_info:
                     logger.info(f"Updating GUI with track info: {track_info['artist']} - {track_info['title']}")
                     self.root.after(0, lambda: self.update_gui(track_info, "music_identified"))
-                    logger.info(f"Identified: {track_info['artist']} - {track_info['title']}")
                 else:
                     logger.info("No track info, updating GUI with music_detected state")
                     self.root.after(0, lambda: self.update_gui(None, "music_detected"))
-                    logger.info("Could not identify the music")
-                
-        finally:
+            
             # Clean up temporary file
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
     
     def run_gui_loop(self):
         """Run the GUI main loop in a separate thread"""
-        # Setup GUI first
-        self.setup_gui()
-        if self.root:
-            self.root.mainloop()
+        def gui_thread():
+            self.setup_gui()
+            if self.root:
+                self.root.mainloop()
+        
+        gui_thread = threading.Thread(target=gui_thread, daemon=True)
+        gui_thread.start()
     
-    async def main_loop(self):
-        """Main loop that runs every 60 seconds"""
+    async def run(self):
+        """Main run loop"""
         logger.info("Starting Musico...")
         
-        # Setup GUI in a separate thread
-        gui_thread = threading.Thread(target=self.run_gui_loop, daemon=True)
-        gui_thread.start()
+        # Start GUI in separate thread
+        self.run_gui_loop()
         
-        # Give GUI time to initialize
+        # Wait a moment for GUI to initialize
         await asyncio.sleep(1)
         
         try:
             while True:
                 logger.info("Starting new audio sample...")
                 await self.process_audio_sample()
-                
-                # Wait 60 seconds before next sample
                 logger.info("Waiting 60 seconds before next sample...")
                 await asyncio.sleep(60)
                 
         except KeyboardInterrupt:
-            logger.info("Shutting down...")
+            logger.info("Musico stopped by user")
         except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+            logger.error(f"Error in main loop: {e}")
         finally:
-            self.audio.terminate()
+            if self.audio:
+                self.audio.terminate()
             if self.root:
                 self.root.quit()
 
 def main():
     """Main entry point"""
-    identifier = MusicIdentifier()
-    
-    try:
-        # Run the async main loop
-        asyncio.run(identifier.main_loop())
-    except Exception as e:
-        logger.error(f"Fatal error: {e}")
-        sys.exit(1)
+    musico = MusicoWindows()
+    asyncio.run(musico.run())
 
 if __name__ == "__main__":
     main()
-
