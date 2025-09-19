@@ -1,6 +1,6 @@
 @echo off
-echo Musico Windows Setup
-echo ===================
+echo Musico Windows Setup (Fixed for Python 3.13+)
+echo =============================================
 echo.
 
 REM Check if Python is installed
@@ -19,6 +19,15 @@ if errorlevel 1 (
 python --version
 echo Python found!
 echo.
+
+REM Check Python version
+echo Checking Python version compatibility...
+python -c "import sys; version = sys.version_info; print(f'Python {version.major}.{version.minor}.{version.micro} detected')"
+python -c "import sys; version = sys.version_info; exit(0 if version >= (3, 8) else 1)" >nul 2>&1
+if errorlevel 1 (
+    echo WARNING: Python 3.8+ is recommended for best compatibility
+    echo.
+)
 
 REM Create virtual environment
 echo Creating virtual environment...
@@ -52,15 +61,36 @@ echo Upgrading pip...
 python -m pip install --upgrade pip
 echo.
 
-REM Install requirements
+REM Install wheel and setuptools first (helps with some packages)
+echo Installing build tools...
+pip install wheel setuptools
+echo.
+
+REM Install requirements with specific versions for better compatibility
 echo Installing Python packages...
-pip install -r requirements_windows.txt
+pip install numpy==1.24.3
+pip install Pillow==10.0.0
+pip install requests==2.31.0
+pip install pyaudio==0.2.11
+pip install shazamio==0.8.1
+
 if errorlevel 1 (
-    echo ERROR: Failed to install requirements
-    echo Please check your internet connection and try again
+    echo ERROR: Failed to install some packages
+    echo This might be due to missing Visual C++ Build Tools
+    echo.
+    echo Please install Microsoft Visual C++ Build Tools from:
+    echo https://visualstudio.microsoft.com/visual-cpp-build-tools/
+    echo.
+    echo Then run this setup script again.
     pause
     exit /b 1
 )
+echo.
+
+REM Test the compatibility modules
+echo Testing Python 3.13+ compatibility modules...
+python -c "import audioop; print('audioop compatibility: OK')"
+python -c "import pyaudioop; print('pyaudioop compatibility: OK')"
 echo.
 
 REM Test audio devices
@@ -68,10 +98,33 @@ echo Testing audio devices...
 python -c "import pyaudio; p = pyaudio.PyAudio(); print('Available audio devices:'); [print(f'  {i}: {p.get_device_info_by_index(i)[\"name\"]}') for i in range(p.get_device_count()) if p.get_device_info_by_index(i)['maxInputChannels'] > 0]; p.terminate()"
 echo.
 
+REM Test GUI
+echo Testing GUI...
+python -c "import tkinter; print('GUI test: PASSED')"
+if errorlevel 1 (
+    echo ERROR: GUI test failed
+    pause
+    exit /b 1
+)
+echo.
+
+REM Test Shazam
+echo Testing Shazam API...
+python -c "from shazamio import Shazam; print('Shazam test: PASSED')"
+if errorlevel 1 (
+    echo ERROR: Shazam test failed
+    pause
+    exit /b 1
+)
+echo.
+
 echo Setup completed successfully!
 echo.
-echo To run Musico, double-click 'run_windows.bat' or run:
+echo To run Musico on Windows:
 echo   run_windows.bat
+echo.
+echo To test the installation:
+echo   test_windows.bat
 echo.
 echo To exit fullscreen mode, press Escape or F11
 echo To quit the application, press Q
