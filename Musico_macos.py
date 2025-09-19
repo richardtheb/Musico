@@ -190,7 +190,7 @@ class MusicoMacOS:
         """Identify music using Shazam API"""
         try:
             logger.info("Sending audio to Shazam for identification...")
-            result = await self.shazam.recognize_song(audio_file)
+            result = await self.shazam.recognize(audio_file)
             
             if result and 'track' in result:
                 track = result['track']
