@@ -54,7 +54,7 @@ echo.
 
 REM Install requirements
 echo Installing Python packages...
-pip install -r requirements.txt
+pip install -r requirements_windows.txt
 if errorlevel 1 (
     echo ERROR: Failed to install requirements
     echo Please check your internet connection and try again
