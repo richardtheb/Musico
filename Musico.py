@@ -59,12 +59,8 @@ class MusicIdentifier:
             logger.info("Setting up GUI...")
             self.root = tk.Tk()
             self.root.title("Musico")
-            self.root.state('zoomed') #Fixes fullscreeen bug, makes it truly fullscreen
             
-            # Make window full screen
-            self.root.attributes('-fullscreen', True)
-            self.root.configure(cursor='none')  # Hide cursor for cleaner look
-            
+             
             # Get screen dimensions
             screen_width = self.root.winfo_screenwidth()
             screen_height = self.root.winfo_screenheight()
@@ -73,6 +69,11 @@ class MusicIdentifier:
             # Create main frame with full coverage
             main_frame = tk.Frame(self.root)
             main_frame.pack(fill=tk.BOTH, expand=True)
+
+            # Make window full screen
+            self.root.attributes('-fullscreen', True)
+            self.root.configure(cursor='none')  # Hide cursor for cleaner look
+           
             
             # Only cover image label - no text labels
             self.cover_label = tk.Label(main_frame, text="", 
