@@ -62,6 +62,7 @@ class MusicIdentifier:
             
             # Make window full screen
             self.root.attributes('-fullscreen', True)
+            self.root.state('zoomed') #Fixes fullscreeen bug, makes it truly fullscreen
             self.root.configure(cursor='none')  # Hide cursor for cleaner look
             
             # Get screen dimensions
