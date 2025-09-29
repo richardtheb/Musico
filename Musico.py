@@ -59,10 +59,10 @@ class MusicIdentifier:
             logger.info("Setting up GUI...")
             self.root = tk.Tk()
             self.root.title("Musico")
+            self.root.state('zoomed') #Fixes fullscreeen bug, makes it truly fullscreen
             
             # Make window full screen
             self.root.attributes('-fullscreen', True)
-            self.root.state('zoomed') #Fixes fullscreeen bug, makes it truly fullscreen
             self.root.configure(cursor='none')  # Hide cursor for cleaner look
             
             # Get screen dimensions
