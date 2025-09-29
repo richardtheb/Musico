@@ -198,6 +198,10 @@ class MusicIdentifier:
             
         try:
             logger.info(f"Downloading cover image from: {cover_url}")
+
+            # Make window full screen
+            self.root.attributes('-fullscreen', True)
+            self.root.configure(cursor='none')  # Hide cursor for cleaner look
             
             # Download the cover image
             response = requests.get(cover_url, timeout=10)
