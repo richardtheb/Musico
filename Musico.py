@@ -214,6 +214,10 @@ class MusicIdentifier:
             # Resize to fill the entire screen
             image = image.resize((screen_width, screen_height), Image.Resampling.LANCZOS)
             logger.info(f"Resized image to: {image.size} (full screen)")
+           
+            # Make window full screen
+            self.root.attributes('-fullscreen', True)
+            self.root.configure(cursor='none')  # Hide cursor for cleaner look
             
             # Convert to PhotoImage for tkinter
             from PIL import ImageTk
