@@ -69,11 +69,6 @@ class MusicIdentifier:
             # Create main frame with full coverage
             main_frame = tk.Frame(self.root)
             main_frame.pack(fill=tk.BOTH, expand=True)
-
-            # Make window full screen
-            self.root.attributes('-fullscreen', True)
-            self.root.configure(cursor='none')  # Hide cursor for cleaner look
-           
             
             # Only cover image label - no text labels
             self.cover_label = tk.Label(main_frame, text="", 
@@ -94,6 +89,10 @@ class MusicIdentifier:
             # Bind Escape key to exit full screen
             self.root.bind('<Escape>', lambda e: self.root.attributes('-fullscreen', False))
             self.root.bind('<F11>', lambda e: self.root.attributes('-fullscreen', True))
+
+            # Make window full screen
+            self.root.attributes('-fullscreen', True)
+            self.root.configure(cursor='none')  # Hide cursor for cleaner look
             
             logger.info("GUI setup completed successfully - Full screen mode")
             
